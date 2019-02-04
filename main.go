@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"flag"
 	"fmt"
+	"os"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -18,8 +19,8 @@ type Db struct {
 	sqlite *sql.DB
 }
 
-// App structure
-type App struct {
+// Keyring structure
+type Keyring struct {
 	Id     int64
 	Name   string
 	ApiKey []byte
@@ -39,15 +40,15 @@ func initSqlite(dbPath string) *Db {
 	// TODO: check if table already exists
 	// TODO: change sqlite bad layout
 
-	appTable := `
-	CREATE TABLE IF NOT EXISTS apps(
+	keyringTable := `
+	CREATE TABLE IF NOT EXISTS keyrings(
 		id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 		name TEXT,
 		key TEXT,
 		created DATETIME
 	);
 	`
-	db.Exec(appTable)
+	db.Exec(keyringTable)
 
 	keyTable := `
 	CREATE TABLE IF NOT EXISTS keys(
@@ -66,24 +67,24 @@ func initSqlite(dbPath string) *Db {
 	return &Db{sqlite: db}
 }
 
-func generateApiKey(appName string) []byte {
+func generateApiKey(keyringName string) []byte {
 
 	// entropy to generate a random byte key
 	randomKey := make([]byte, 256)
 	rand.Read(randomKey)
 
-	// generate hmac signature of app name
+	// generate hmac signature of keyring name
 	hmacHdl := hmac.New(sha1.New, randomKey)
-	hmacHdl.Write([]byte(appName))
+	hmacHdl.Write([]byte(keyringName))
 	return hmacHdl.Sum(nil)
 }
 
-func (db *Db) createApp(name string) App {
+func (db *Db) createKeyring(name string) Keyring {
 	// generate our ApiKey
 	key := generateApiKey(name)
 
-	// insert it in the app database
-	stmt, err := db.sqlite.Prepare(`INSERT INTO apps(name, key, created) VALUES(?, ?, ?)`)
+	// insert it in the keyring database
+	stmt, err := db.sqlite.Prepare(`INSERT INTO keyrings(name, key, created) VALUES(?, ?, ?)`)
 	defer stmt.Close()
 	air(err)
 
@@ -93,26 +94,67 @@ func (db *Db) createApp(name string) App {
 	i64, err := res.LastInsertId()
 	air(err)
 
-	var app App
+	var keyring Keyring
 
-	app.Id = i64
-	app.Name = name
-	app.ApiKey = key
+	keyring.Id = i64
+	keyring.Name = name
+	keyring.ApiKey = key
 
-	return app
+	return keyring
 }
 
 func main() {
 	// initialize the database
 	db := initSqlite("kyubi.db")
 
-	name := flag.String("name", "", "name of the app")
-	//public := flag.String("public", "", "public identity")
-	//secret := flag.String("secret", "", "secret aes key")
-	flag.Parse()
+	// new keyring flagset
+	new := flag.NewFlagSet("new", flag.ExitOnError)
+	newKeyring := new.String("keyring", "", "keyring name")
 
-	if *name != "" {
-		app := db.createApp(*name)
-		fmt.Println("id:", app.Id, "key:", base64.StdEncoding.EncodeToString(app.ApiKey))
+	// add credentials flagset
+	add := flag.NewFlagSet("add", flag.ExitOnError)
+	addKeyring := add.String("keyring", "", "keyring name")
+	addPublic := add.String("public", "", "yubikey's public identify")
+	addSecret := add.String("secret", "", "yubikey's secret aes key")
+
+	// help message
+	flag.Usage = func() {
+		fmt.Println("Usage:", os.Args[0], "COMMAND [OPTIONS]")
+		fmt.Println("\nCommands:")
+		fmt.Println("  new\tcreate a new keyring")
+		fmt.Println("  add\tadd credentials to a keyring")
+		fmt.Println("  rm\tdelete a keyring")
+	}
+
+	if len(os.Args) < 2 {
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	switch os.Args[1] {
+	case "new":
+		new.Parse(os.Args[2:])
+	case "add":
+		add.Parse(os.Args[2:])
+	default:
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if new.Parsed() {
+		if *newKeyring == "" {
+			new.PrintDefaults()
+			os.Exit(1)
+		}
+
+		keyring := db.createKeyring(*newKeyring)
+		fmt.Println("id:", keyring.Id, "key:", base64.StdEncoding.EncodeToString(keyring.ApiKey))
+	}
+
+	if add.Parsed() {
+		if *addKeyring == "" || *addPublic == "" || *addSecret == "" {
+			add.PrintDefaults()
+			os.Exit(1)
+		}
 	}
 }
