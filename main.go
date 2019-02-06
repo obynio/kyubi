@@ -9,11 +9,26 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mattn/go-sqlite3"
 	_ "github.com/mattn/go-sqlite3"
+)
+
+// Reply statuses
+const (
+	OK                = "OK"
+	REPLAYED_OTP      = "REPLAYED_OTP"
+	MISSING_PARAMETER = "MISSING_PARAMETER"
+	BAD_OTP           = "BAD_OTP"
+	BAD_SIGNATURE     = "BAD_SIGNATURE"
+	NO_SUCH_CLIENT    = "NO_SUCH_CLIENT"
+	BACKEND_ERROR     = "BACKEND_ERROR"
 )
 
 // Db structure
@@ -29,7 +44,6 @@ type Keyring struct {
 }
 
 // Key structure
-// TODO: are Used and Session really useful ?
 type Key struct {
 	Id      int64
 	Created time.Time
@@ -41,7 +55,6 @@ type Key struct {
 }
 
 func air(err error) {
-	// panic on error
 	if err != nil {
 		panic(err)
 	}
@@ -51,9 +64,6 @@ func initSqlite(dbPath string) *Db {
 	dsn := "file:" + dbPath + "?_foreign_keys=1&_secure_delete=1"
 	db, err := sql.Open("sqlite3", dsn)
 	air(err)
-
-	// TODO: check if table already exists
-	// TODO: change sqlite bad layout
 
 	keyringTable := `
 	CREATE TABLE IF NOT EXISTS keyrings(
@@ -79,18 +89,6 @@ func initSqlite(dbPath string) *Db {
 	db.Exec(keyTable)
 
 	return &Db{sqlite: db}
-}
-
-func generateApiKey(keyringName string) []byte {
-
-	// entropy to generate a random byte key
-	randomKey := make([]byte, 256)
-	rand.Read(randomKey)
-
-	// generate hmac signature of keyring name
-	hmacHdl := hmac.New(sha1.New, randomKey)
-	hmacHdl.Write([]byte(keyringName))
-	return hmacHdl.Sum(nil)
 }
 
 func (db *Db) createKeyring(name string) (*Keyring, error) {
@@ -199,6 +197,66 @@ func (db *Db) getKeyring(id int64) (*Keyring, error) {
 	return &keyring, nil
 }
 
+func generateApiKey(keyringName string) []byte {
+
+	// entropy to generate a random byte key
+	randomKey := make([]byte, 256)
+	rand.Read(randomKey)
+
+	return sign([]string{keyringName}, randomKey)
+}
+
+func sign(params []string, key []byte) []byte {
+	sort.Strings(params)
+	strings.Join(params, "&")
+
+	// generate hmac signature of params
+	hmacHdl := hmac.New(sha1.New, key)
+	hmacHdl.Write([]byte(key))
+	return hmacHdl.Sum(nil)
+}
+
+func (db *Db) handler(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	otp := r.URL.Query().Get("otp")
+	nonce := r.URL.Query().Get("nonce")
+
+	if id == "" || otp == "" || nonce == "" {
+		db.reply(w, MISSING_PARAMETER, "", "", "")
+	}
+
+	w.Write([]byte(otp))
+}
+
+func (db *Db) reply(w http.ResponseWriter, status, id, otp, nonce string) {
+	var keyring *Keyring
+	params := []string{}
+
+	if status != MISSING_PARAMETER {
+		if id64, err := strconv.ParseInt(id, 10, 64); err == nil {
+			if keyring, err = db.getKeyring(id64); err == nil {
+
+				params = append(params, "nonce=", nonce)
+				params = append(params, "otp=", otp)
+
+			} else {
+				status = NO_SUCH_CLIENT
+			}
+		} else {
+			status = NO_SUCH_CLIENT
+		}
+	}
+
+	params = append(params, "status=", status)
+	params = append(params, "t=", time.Now().Format(time.RFC3339))
+
+	if status != NO_SUCH_CLIENT {
+		params = append(params, "h=", base64.StdEncoding.EncodeToString(sign(params, keyring.ApiKey)))
+	}
+
+	w.Write([]byte(strings.Join(params, "\n")))
+}
+
 func main() {
 	// initialize the database
 	db := initSqlite("kyubi.db")
@@ -223,8 +281,10 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		flag.Usage()
-		os.Exit(1)
+		//flag.Usage()
+		//os.Exit(1)
+		http.HandleFunc("/wsapi/2.0/verify", db.handler)
+		http.ListenAndServe(":4242", nil)
 	}
 
 	switch os.Args[1] {
