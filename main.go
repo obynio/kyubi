@@ -223,11 +223,16 @@ func (db *Db) handler(w http.ResponseWriter, r *http.Request) {
 
 	if id == "" || otp == "" || nonce == "" {
 		db.reply(w, MISSING_PARAMETER, "", "", "")
+		return
 	}
 
-	w.Write([]byte(otp))
+	if len(otp) < 12 {
+		db.reply(w, BAD_OTP, id, otp, nonce)
+		return
+	}
 }
 
+// TODO: check two times if everything is ok
 func (db *Db) reply(w http.ResponseWriter, status, id, otp, nonce string) {
 	var keyring *Keyring
 	params := []string{}
@@ -236,8 +241,8 @@ func (db *Db) reply(w http.ResponseWriter, status, id, otp, nonce string) {
 		if id64, err := strconv.ParseInt(id, 10, 64); err == nil {
 			if keyring, err = db.getKeyring(id64); err == nil {
 
-				params = append(params, "nonce=", nonce)
-				params = append(params, "otp=", otp)
+				params = append(params, "nonce="+nonce)
+				params = append(params, "otp="+otp)
 
 			} else {
 				status = NO_SUCH_CLIENT
@@ -247,11 +252,11 @@ func (db *Db) reply(w http.ResponseWriter, status, id, otp, nonce string) {
 		}
 	}
 
-	params = append(params, "status=", status)
-	params = append(params, "t=", time.Now().Format(time.RFC3339))
+	params = append(params, "status="+status)
+	params = append(params, "t="+time.Now().Format(time.RFC3339))
 
-	if status != NO_SUCH_CLIENT {
-		params = append(params, "h=", base64.StdEncoding.EncodeToString(sign(params, keyring.ApiKey)))
+	if status != MISSING_PARAMETER && status != NO_SUCH_CLIENT {
+		params = append(params, "h="+base64.StdEncoding.EncodeToString(sign(params, keyring.ApiKey)))
 	}
 
 	w.Write([]byte(strings.Join(params, "\n")))
