@@ -208,11 +208,11 @@ func generateApiKey(keyringName string) []byte {
 
 func sign(params []string, key []byte) []byte {
 	sort.Strings(params)
-	strings.Join(params, "&")
+	payload := strings.Join(params, "&")
 
 	// generate hmac signature of params
 	hmacHdl := hmac.New(sha1.New, key)
-	hmacHdl.Write([]byte(key))
+	hmacHdl.Write([]byte(payload))
 	return hmacHdl.Sum(nil)
 }
 
