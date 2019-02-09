@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/mattn/go-sqlite3"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 // Reply statuses
@@ -266,17 +265,15 @@ func parseToken(token string) ([]byte, []byte, error) {
 	// check minimal otp length
 	token = strings.TrimSpace(token)
 	tokenLen := len(token)
-	if tokenLen <= 32 {
+	if tokenLen <= OtpSize {
 		return nil, nil, errors.New(BAD_OTP)
 	}
 
-	// TODO: useless ?
-	// TODO: use const variables
 	// where the otp starts in the token
-	canary := tokenLen - 32
+	canary := tokenLen - OtpSize
 
 	// extract public key
-	if lng := len(token[:canary]); lng < 1 || lng > 32 {
+	if lng := len(token[:canary]); lng < 1 || lng > PubSize {
 		return nil, nil, errors.New(BAD_OTP)
 	}
 	pub := make([]byte, len(token[:canary]))
