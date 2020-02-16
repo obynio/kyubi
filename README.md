@@ -47,7 +47,7 @@ Each response has a timestamp and HMAC-SHA1 signed using the API key generated a
 
 ## Why ModHex ?
 
-**ModHex** stands for MODified HEXadecimal. It is an encoding scheme used by YubiKeys to handle different keyboard layouts. Here is thee answer from the hardware engineering team at Yubico.
+**ModHex** stands for MODified HEXadecimal. It is an encoding scheme used by YubiKeys to handle different keyboard layouts. Here is the answer from the hardware engineering team at Yubico.
 
 *We've been asked quite a few times now regarding the modhex scheme used by the Yubikey. Why don't you use for example base64 instead as this would allow six bits to be sent for each keystroke instead of just four for the modhex scheme.*
 
