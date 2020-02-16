@@ -53,7 +53,7 @@ Each response has a timestamp and HMAC-SHA1 signed using the API key generated a
 
 *The answer is keyboard layouts. Most countries have different keyboard layouts and what most people don't think about it that the keyboard mapping is not known by the keyboard itself. The keyboard is luckily unaware of what text is printed on top of the keys. It simply just sends the key number or "scan code" and then the computer translates it depending on your keyboard settings.*
 
-*After quite some investigation we found out that there are a few keys that are mapped to the same scan code for almost all national settings.*
+*After quite some investigation we found out that there are a few keys that are mapped to the same scan code for almost all national settings. There we have the modhex codes.*
 
 
 ## Useful resources
