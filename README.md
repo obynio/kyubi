@@ -1,8 +1,6 @@
-# Kyubi
-
 <p align="center"><img width="250" src="https://user-images.githubusercontent.com/2095991/74606706-f9a64880-50d2-11ea-9808-3c44dc956612.png" alt="kyubi logo"></p>
 
-<p align="center"><i>A Yubikey OTP validation server</i></p>
+# Kyubi
 
 **Kyubi** is a HOTP validation server (HMAC-based One-Time Password) compatible with the YubiKey. It was created for an educational purpose, to learn more about how YubiKey OTP are working.
 
